@@ -12,12 +12,33 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+import argparse
+
 
 def _parse_arguments():
     """
     解析命令行参数
+
+    Args:
+        None: 该函数不接受任何参数，直接从命令行获取参数
+
+    Returns:
+        argparse.Namespace: 包含解析后的命令行参数的对象，包含以下属性：
+            - sbom (str): 待扫描的SBOM文件路径
+            - output (str): 安全评估报告输出目录
+            - disable_tqdm (bool): 是否禁用进度条显示
     """
-    # TODO: 添加命令行参数解析逻辑
+
+    parser = argparse.ArgumentParser(
+        description='对SBOM文件进行安全评估，并生成安全评估报告。')
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--sbom", "-s", help="SBOM文件路径")
+
+    parser.add_argument("--output", "-o", required=True, help="安全评估报告输出目录。")
+    parser.add_argument("--disable-tqdm", action='store_true', help="禁用进度条显示。")
+
+    return parser.parse_args()
 
 
 def _setup_logging(formatted_utc_time):
