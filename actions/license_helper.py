@@ -14,6 +14,7 @@
 
 import os
 import re
+import matplotlib.pyplot as plt
 from actions.data_helper import read_data_from_json
 from actions import ASSIST_DIR
 
@@ -247,8 +248,110 @@ def count_licenses(licenses):
     return license_summary
 
 
-def licenses_visualization():
+def licenses_visualization(license_summary, output_file):
     """
     生成许可证分布的饼图可视化图表并保存到文件
+
+    Args:
+        license_summary (list): 许可证摘要列表，每个元素是包含"name"和"count"键的字典，
+                               分别表示许可证名称和出现次数
+        output_file (str): 输出图片文件的路径，包括文件名和扩展名
+
+    Returns:
+        None: 该函数不返回任何值，直接将生成的图表保存到指定路径
     """
-    # TODO: 使用 Matplotlib 生成饼图可视化图表并保存到文件
+
+    # 按计数值排序（从大到小）
+    sorted_licenses = sorted(
+        license_summary, key=lambda x: x['count'], reverse=True)
+
+    # 计算总计数
+    total_count = sum(item['count'] for item in sorted_licenses)
+
+    # 处理总计数为0的情况
+    if total_count == 0:
+        return
+
+    main_data = []
+    other_licenses = []
+    other_count = 0
+    cumulative_percentage = 0.0
+    cumulative_threshold = 90.0
+
+    # 分离前90%的许可证和剩余部分
+    for item in sorted_licenses:
+        name = item['name']
+        count = item['count']
+        percentage = (count / total_count) * 100
+
+        if cumulative_percentage < cumulative_threshold or not main_data:
+            main_data.append((name, count))
+            cumulative_percentage += percentage
+        else:
+            other_licenses.append(name)
+            other_count += count
+
+    # 如果有剩余许可证则添加"Other"类别
+    if other_count > 0:
+        main_data.append(("Other", other_count))
+
+    # 提取数值和构建图例标签
+    sizes = [count for _, count in main_data]
+    total = sum(sizes)
+
+    # 创建饼图
+    fig, ax = plt.subplots(figsize=(12, 9))
+    colors = plt.cm.tab20c(np.linspace(0, 1, len(sizes)))
+    wedges, texts = ax.pie(
+        sizes,
+        colors=colors,
+        startangle=90,
+        wedgeprops=dict(width=0.4, edgecolor='w')
+    )
+    centre_circle = plt.Circle(
+        (0, 0), 0.3, facecolor='white', edgecolor='lightgray')
+    fig.gca().add_artist(centre_circle)
+    ax.text(0, 0, f"Total\n{total}", ha='center', va='center', fontsize=12)
+
+    # 构建完整图例标签（名称 + 计数 + 百分比）
+    legend_labels = []
+    for i, (name, count) in enumerate(main_data):
+        percent = 100. * count / total
+
+        # 为"Other"类别添加特殊处理
+        if name == "Other":
+            # 限制显示的许可证数量以避免图例过长
+            max_display = 10
+            displayed_licenses = other_licenses[:max_display]
+            hidden_count = len(other_licenses) - max_display
+
+            other_details = "\n".join(
+                [f"· {license}" for license in displayed_licenses])
+            if hidden_count > 0:
+                other_details += f"\n· ...and {hidden_count} more"
+            label = f"Other ({other_count}, {percent:.1f}%):\n{other_details}"
+        else:
+            label = f"{name} ({count}, {percent:.1f}%)"
+        legend_labels.append(label)
+
+    # 将图例放在饼图右侧
+    plt.legend(
+        wedges,
+        legend_labels,
+        title="Licenses Distribution",
+        loc="center left",
+        bbox_to_anchor=(1.05, 0.5),
+        fontsize=9,
+        title_fontsize=11
+    )
+
+    # 添加标题
+    plt.title('Licenses Distribution', fontsize=16, pad=20)
+
+    # 确保饼图是圆形
+    ax.axis('equal')
+
+    # 调整布局并保存
+    plt.subplots_adjust(right=0.65)  # 为右侧图例留出空间
+    plt.savefig(output_file, dpi=200, bbox_inches='tight')
+    plt.close(fig)
