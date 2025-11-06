@@ -203,18 +203,48 @@ def get_license_category(license_name):
     return license_map.get(license_name, "Unknown")
 
 
-def filter_licenses():
+def filter_licenses(license_list):
     """
     过滤掉许可证列表中包含'unknown'或'non-standard'等条目（不区分大小写）
+
+    Args
+        license_list (list): 许可证统计列表，每个元素是包含"name"和"count"的字典
+
+    Returns:
+        list: 过滤后的许可证列表
     """
-    # TODO: 过滤掉包含'unknown'或'non-standard'的许可证
+
+    exclude_terms = {"unknown", "non-standard", "proprietary-license"}
+    return [
+        license for license in license_list
+        if not any(term in license["name"].lower() for term in exclude_terms)
+    ]
 
 
-def count_licenses():
+def count_licenses(licenses):
     """
     统计许可证出现次数并转换为摘要格式
+
+    Args:
+        licenses (list): 许可证列表，包含所有检测到的许可证名称
+
+    Returns:
+        list: 许可证摘要列表，每个元素是包含"name"和"count"键的字典，
+              分别表示许可证名称和出现次数
     """
-    # TODO: 统计许可证出现的次数并转换为摘要格式
+
+    license_counter = {}
+
+    for license in licenses:
+        license_counter[license] = license_counter.get(license, 0) + 1
+
+    # 转换为generate_pie_chart所需的格式
+    license_summary = [
+        {"name": license, "count": count}
+        for license, count in license_counter.items()
+    ]
+
+    return license_summary
 
 
 def licenses_visualization():
