@@ -13,6 +13,7 @@
 # See the Mulan PSL v2 for more details.
 
 import os
+import re
 from actions.data_helper import read_data_from_json
 from actions import ASSIST_DIR
 
@@ -85,7 +86,8 @@ LICENSE_CATEGORY_DETAILS = [
 ]
 
 LICENSE_MAP = {}
-
+licenses_file_path = os.path.join(ASSIST_DIR, 'spdx-licenses.json')
+SPDX_LICENSES_LIST = read_data_from_json(licenses_file_path)
 
 def _load_license_map():
     """
@@ -111,18 +113,79 @@ def _load_license_map():
     return LICENSE_MAP
 
 
-def _standardize_license_name():
+def _standardize_license_name(license_input: str) -> str:
     """
     将提供的许可名称标准化为 SPDX 标准名称。
+
+    Args:
+        license_input (str): 输入的许可名称，可能是 SPDX 标准名称或其变体。
+
+    Returns:
+        str: 标准化的 SPDX 许可名称。如果未找到匹配项，则返回原始输入。
     """
-    # TODO: 使用标准名称映射关系将提供的名称映射为标准名称
+
+    # 定义分隔符的正则表达式模式
+    delimiter_pattern = r'(?i)(\s+or\s+|\s+and\s+|[()&|])'
+
+    # 使用正则表达式按分隔符进行分割
+    segments = re.split(delimiter_pattern, license_input)
+
+    # 创建一个用于存放 (alt_name, spdxName) 对的列表
+    replacement_pairs = []
+    for license_info in SPDX_LICENSES_LIST:
+        spdx_name = license_info.get("spdx_name")
+        if not spdx_name:
+            continue
+        for alt_name in license_info.get("alt_names", []):
+            replacement_pairs.append((alt_name, spdx_name))
+
+    # 按 alt_name 的长度从长到短排序，确保长的先替换
+    replacement_pairs.sort(key=lambda x: len(x[0]), reverse=True)
+
+    # 遍历每个片段，检查是否匹配任何许可证名
+    for i, segment in enumerate(segments):
+        for alt_name, spdx_name in replacement_pairs:
+            # 忽略大小写的匹配
+            if segment.strip().lower() == alt_name.lower():
+                segments[i] = spdx_name
+                break
+
+    # 将片段重新组合为最终字符串，确保空格被保留
+    return ''.join(segments)
 
 
-def split_license():
+def split_license(license_str):
     """
     拆分复合许可证字符串为单个许可证列表
+
+    Args:
+        license_str (str): 复合许可证字符串，可能包含OR、AND等逻辑操作符和括号
+
+    Returns:
+        list: 标准化后的单个许可证名称列表，去除了重复项
     """
-    # TODO: 使用正则表达式将提供的字符串拆分为单个许可证名称
+
+    if not license_str:
+        return []
+
+    # 移除括号
+    cleaned = re.sub(r'[()]', '', license_str)
+
+    # 使用不区分大小写的正则表达式拆分OR或AND
+    pattern = re.compile(r'\s+OR\s+|\s+AND\s+', re.IGNORECASE)
+    parts = pattern.split(cleaned)
+
+    results = []
+    for part in parts:
+        if part.strip():
+            # 移除每个许可证中的with子句（不区分大小写）
+            cleaned_part = re.sub(r'\s+with\s+.+$', '',
+                                  part.strip(), flags=re.IGNORECASE)
+            standard_license = _standardize_license_name(cleaned_part.strip())
+            if standard_license not in results:
+                results.append(standard_license)
+
+    return results
 
 
 def get_license_category(license_name):
