@@ -12,6 +12,10 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+import os
+from actions.data_helper import read_data_from_json
+from actions import ASSIST_DIR
+
 
 # 定义四大种类许可证的引入建议
 LICENSE_TYPE_ADVICE = {
@@ -80,11 +84,31 @@ LICENSE_CATEGORY_DETAILS = [
     }
 ]
 
+LICENSE_MAP = {}
+
+
 def _load_license_map():
     """
     加载许可证映射关系到全局LICENSE_MAP字典中
+
+    Args:
+        无参数
+
+    Returns:
+        dict: 包含许可证键值对的字典，键为SPDX许可证标识符，值为许可证类别
     """
-    # TODO: 从文件中加载许可证映射关系到全局变量中
+
+    if not LICENSE_MAP:
+        licenses = read_data_from_json(
+            os.path.join(ASSIST_DIR, 'licenses.json'))
+        for item in licenses:
+            key = item.get("spdx_license_key")
+            category = item.get("category", "Unknown")
+            if key:
+                LICENSE_MAP[key] = category
+            for other_key in item.get("other_spdx_license_keys", []):
+                LICENSE_MAP[other_key] = category
+    return LICENSE_MAP
 
 
 def _standardize_license_name():
@@ -101,11 +125,19 @@ def split_license():
     # TODO: 使用正则表达式将提供的字符串拆分为单个许可证名称
 
 
-def get_license_category():
+def get_license_category(license_name):
     """
     获取许可证的类别
+
+    Args:
+        license_name (str): 许可证名称
+
+    Returns:
+        str: 许可证类别，如果未找到匹配项则返回"Unknown"
     """
-    # TODO: 使用许可证数据集获取许证的类别
+
+    license_map = _load_license_map()
+    return license_map.get(license_name, "Unknown")
 
 
 def filter_licenses():
