@@ -15,6 +15,8 @@
 import os
 import json
 import logging
+import subprocess
+from pathlib import Path
 
 
 def read_data_from_json(json_file_path):
@@ -70,11 +72,60 @@ def save_docx_report(doc, docx_file_path):
     doc.save(docx_file_path)
 
 
-def convert_docx_to_pdf():
+def convert_docx_to_pdf(docx_path, output_dir):
     """
     将DOCX文件转换为PDF并保存到指定目录
+
+    Args:
+        docx_path (str): 输入的DOCX文件路径
+        output_dir (str): 输出PDF的目录路径
+
+    Returns:
+        str: 成功时返回生成的PDF路径，失败时返回None
     """
-    # TODO: 添加对 DOCX 到 PDF 的转换逻辑
+
+    # 检查输入文件是否存在
+    if not os.path.isfile(docx_path):
+        raise FileNotFoundError(f"输入文件不存在: {docx_path}")
+
+    # 确保输出目录存在（如果不存在则创建）
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    # 获取不带扩展名的文件名
+    filename = Path(docx_path).stem
+
+    try:
+        # 使用LibreOffice进行转换
+        command = [
+            'libreoffice',
+            '--headless',
+            '--convert-to',
+            'pdf',
+            '--outdir',
+            output_dir,
+            docx_path
+        ]
+
+        # 执行转换命令
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
+
+        # 检查是否生成PDF文件
+        pdf_path = os.path.join(output_dir, f"{filename}.pdf")
+        if os.path.exists(pdf_path):
+            return pdf_path
+        else:
+            raise RuntimeError("PDF文件生成失败")
+
+    except subprocess.CalledProcessError as e:
+        error_msg = f"转换失败: {e.stderr.decode('utf-8')}" if e.stderr else f"转换失败: {e}"
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        raise RuntimeError(f"发生未知错误: {str(e)}")
 
 
 def setup_paths():
