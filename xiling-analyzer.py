@@ -30,6 +30,7 @@ def _parse_arguments():
             - sbom (str): 待扫描的SBOM文件路径
             - output (str): 安全评估报告输出目录
             - disable_tqdm (bool): 是否禁用进度条显示
+            - config (str): 外部配置文件路径
     """
 
     parser = argparse.ArgumentParser(
@@ -40,6 +41,7 @@ def _parse_arguments():
 
     parser.add_argument("--output", "-o", required=True, help="安全评估报告输出目录。")
     parser.add_argument("--disable-tqdm", action='store_true', help="禁用进度条显示。")
+    parser.add_argument("--config", required=False, help="外部配置文件路径。")
 
     return parser.parse_args()
 
@@ -85,6 +87,51 @@ def _setup_logging(formatted_utc_time):
         '%(asctime)s [%(levelname)s] %(message)s')
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
+
+
+def _merge_configs(default_config, external_config, path=""):
+    """
+    合并默认配置和外部配置文件，优先使用外部配置项。
+
+    Args:
+        default_config (dict): 默认配置字典，作为基础配置
+        external_config (dict): 外部配置字典，优先级高于默认配置
+        path (str): 配置项的路径前缀，用于构建完整的配置项路径，主要用于日志输出
+
+    Returns:
+        dict: 合并后的配置字典，外部配置项会覆盖默认配置中的同名项
+    """
+
+    merged = default_config.copy()
+
+    for key, external_value in external_config.items():
+        # 构建当前配置项的路径，用于日志输出
+        current_path = f"{path}.{key}" if path else key
+
+        if key in merged:
+            default_value = merged[key]
+
+            if isinstance(default_value, dict) and isinstance(external_value, dict):
+                merged[key] = _merge_configs(
+                    default_value, external_value, path=current_path)
+
+            # 检查类型是否匹配
+            elif type(default_value) is not type(external_value):
+                logging.warning(
+                    f"类型不匹配: 配置项 '{current_path}'。 "
+                    f"默认类型为 {type(default_value).__name__}, "
+                    f"外部类型为 {type(external_value).__name__}。 "
+                    "将忽略此外部配置。"
+                )
+                continue
+
+            else:
+                merged[key] = external_value
+
+        else:
+            merged[key] = external_value
+
+    return merged
 
 
 def main():
