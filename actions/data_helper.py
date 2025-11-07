@@ -129,11 +129,33 @@ def convert_docx_to_pdf(docx_path, output_dir):
         raise RuntimeError(f"发生未知错误: {str(e)}")
 
 
-def setup_paths():
+def setup_paths(output_base_dir, base_name_with_timestamp):
     """
     为给定的扫描目标统一创建并返回所有必需的路径。
+
+    Args:
+        output_base_dir (str): 用户指定的总输出目录。
+        base_name_with_timestamp (str): 带有时间戳的唯一基础名称，例如 "pkg-1.0_20250915123000"。
+
+    Returns:
+        dict: 包含所有生成路径的字典。
     """
-    # TODO: 添加路径设置逻辑
+
+    output_dir = os.path.join(output_base_dir, base_name_with_timestamp)
+    data_dir = os.path.join(output_dir, "分析记录")
+    os.makedirs(data_dir, exist_ok=True)
+
+    paths = {
+        "output_dir": output_dir,
+        "data_dir": data_dir,
+        "docx_report": os.path.join(output_dir, f"{base_name_with_timestamp} 安全引入评估报告.docx"),
+        "licenses_pie_chart": os.path.join(data_dir, f"{base_name_with_timestamp} 许可证分布图.png"),
+        "dep_scan_results": os.path.join(data_dir, f"{base_name_with_timestamp} 依赖项扫描结果.json"),
+        "files_info": os.path.join(data_dir, f"{base_name_with_timestamp} 文件级许可证信息.json"),
+        "dep_licenses_pie_chart": os.path.join(data_dir, f"{base_name_with_timestamp} 依赖项许可证分布图.png"),
+        "vulns_record": os.path.join(data_dir, f"{base_name_with_timestamp} 漏洞扫描结果.json"),
+    }
+    return paths
 
 
 def get_scan_dates(config):
