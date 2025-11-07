@@ -16,6 +16,7 @@ import os
 import json
 import logging
 import subprocess
+import datetime
 from pathlib import Path
 
 
@@ -135,11 +136,27 @@ def setup_paths():
     # TODO: 添加路径设置逻辑
 
 
-def get_scan_dates():
+def get_scan_dates(config):
     """
     根据配置确定报告的开始和结束日期。
+
+    Args:
+        config (dict): 配置对象，包含日期设置相关信息。
+                      如果config['general']['date_setting']['fixed_date']为True，
+                      则使用config['general']['date_setting']['date']作为固定日期；
+                      否则使用当前日期。
+
+    Returns:
+        tuple: 包含两个元素的元组，分别为开始日期和结束日期字符串，格式为"YYYY-MM-DD"。
+               如果使用固定日期，则两个元素相同；否则都为当前日期。
     """
-    # TODO: 添加日期逻辑
+
+    if config.get('general', {}).get('date_setting', {}).get('fixed_date'):
+        date = config.get('general', {}).get('date_setting', {}).get('date')
+        return date, date
+    else:
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        return today_str, today_str
 
 
 def log_scan_summary():
