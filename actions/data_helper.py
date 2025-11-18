@@ -181,8 +181,26 @@ def get_scan_dates(config):
         return today_str, today_str
 
 
-def log_scan_summary():
+def log_scan_summary(total_count, failed_packages):
     """
     记录扫描结果摘要信息，包括成功处理的包数量和失败的包列表。
+
+    Args:
+        total_count (int): 总共需要处理的包数量
+        failed_packages (list): 处理失败的包列表，每个元素为包含'name'、'version'和'error'键的字典
+
+    Returns:
+        None: 该函数不返回任何值，仅记录日志信息
     """
-    # TODO: 添加日志记录逻辑
+
+    success_count = total_count - len(failed_packages)
+    logging.info(f"成功处理包数量: {success_count} / {total_count}")
+
+    if failed_packages:
+        logging.warning("处理失败的包列表:")
+        for failed in failed_packages:
+            name = failed.get('name', 'N/A')
+            version = failed.get('version', 'N/A')
+            error = failed.get('error', '未知错误')
+            logging.warning(
+                f"{name}-{version}, 错误原因: {error}")
