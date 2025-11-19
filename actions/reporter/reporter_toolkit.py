@@ -12,6 +12,10 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+from typing import List, Dict
+from actions.package import Package
+from actions.license_helper import LICENSE_CATEGORY_DETAILS
+
 
 def _find_non_commercial_licenses():
     """
@@ -20,11 +24,28 @@ def _find_non_commercial_licenses():
     # TODO: 通过许可证数据集查找禁止商业用途的许可证
 
 
-def categorize_packages():
+def categorize_packages(packages: List[Package]) -> Dict[str, List[Package]]:
     """
     将软件包按照许可证类别进行分类
+
+    Args:
+        packages (List[Package]): 软件包列表，每个软件包包含名称、版本和许可证信息
+
+    Returns:
+        Dict[str, List[Package]]: 按许可证类别分类的字典，键为许可证类别名称，
+                                  值为属于该类别的软件包列表
     """
-    # TODO: 通过许可证数据集对软件包进行分类
+
+    license_categories = [item["scancode_category"]
+                          for item in LICENSE_CATEGORY_DETAILS]
+    categorized_dict = {category: [] for category in license_categories}
+
+    for package in packages:
+        for category in package.categories:
+            if category in categorized_dict:
+                categorized_dict[category].append(package)
+
+    return categorized_dict
 
 
 def analyze_licenses():
