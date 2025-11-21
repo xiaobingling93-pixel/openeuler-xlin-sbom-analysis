@@ -14,8 +14,11 @@
 
 from typing import List, Dict
 from actions.package import Package
-from actions.license_helper import LICENSE_CATEGORY_DETAILS
-
+from actions.license_helper import (
+    split_license,
+    get_license_category,
+    LICENSE_CATEGORY_DETAILS
+)
 
 def _find_non_commercial_licenses():
     """
@@ -48,11 +51,47 @@ def categorize_packages(packages: List[Package]) -> Dict[str, List[Package]]:
     return categorized_dict
 
 
-def analyze_licenses():
+def analyze_licenses(license_summary):
     """
     分析许可证数据并返回结构化结果
+
+    Args:
+        license_summary (list): 许可证摘要信息列表，每个元素为包含许可证信息的字典，
+                                通常包含许可证名称等字段
+
+    Returns:
+        dict: 包含许可证分析结果的字典，包含以下键值对：
+            - "all_licenses" (list): 所有许可证列表，每个元素为(name, category)元组
+            - "category_counts" (dict): 各分类的许可证计数，键为分类名称，值为该分类下的许可证数量
+            - "category_licenses" (dict): 各分类的具体许可证集合，键为分类名称，值为该分类下的许可证名称集合
     """
-    # TODO: 通过许可证数据集对许可证进行统计并返回结构化结果
+
+    # 收集所有许可证及其类别
+    all_licenses = []
+    for lic in license_summary:
+        license_names = split_license(lic["name"])
+        for name in license_names:
+            category = get_license_category(name)
+            all_licenses.append((name, category))
+
+    # 初始化分类统计
+    categories = [item["scancode_category"]
+                  for item in LICENSE_CATEGORY_DETAILS] + ["Unknown"]
+    category_counts = {cat: set() for cat in categories}
+    category_licenses = {cat: set() for cat in categories}
+
+    # 统计各类别许可证
+    for name, category in all_licenses:
+        normalized_category = category if category in category_counts else "Unknown"
+        category_counts[normalized_category].add(name)
+        category_licenses[normalized_category].add(name)
+
+    return {
+        "all_licenses": all_licenses,
+        "category_counts": {k: len(v) for k, v in category_counts.items()},
+        "category_licenses": category_licenses
+    }
+
 
 
 def count_vulnerability_severity():
