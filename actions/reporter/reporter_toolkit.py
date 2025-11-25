@@ -18,14 +18,42 @@ from actions.package import Package
 from actions.license_helper import (
     split_license,
     get_license_category,
-    LICENSE_CATEGORY_DETAILS
+    LICENSE_CATEGORY_DETAILS,
+    SPDX_LICENSES_LIST
 )
 
-def _find_non_commercial_licenses():
+def _find_non_commercial_licenses(license_summary):
     """
     查找禁止商业用途的许可证
+
+    Args:
+        license_summary (list): 许可证摘要信息列表，每个元素为包含许可证信息的字典，
+                                通常包含许可证名称等字段
+
+    Returns:
+        list: 包含禁止商业用途的许可证列表，每个元素为包含许可证信息的字典
     """
-    # TODO: 通过许可证数据集查找禁止商业用途的许可证
+
+    # 创建SPDX许可证名称（小写）到许可证信息的映射
+    spdx_mapping = {}
+    for spdx_license in SPDX_LICENSES_LIST:
+        key = spdx_license["spdx_name"].lower()
+        spdx_mapping[key] = spdx_license
+
+    non_commercial_licenses = []
+
+    for license_info in license_summary:
+        license_name = license_info["name"]
+        license_key = license_name.lower()
+
+        if license_key in spdx_mapping:
+            spdx_info = spdx_mapping[license_key]
+            for restriction in spdx_info["cannot"]:
+                if restriction["name"].lower() == "commercial use":
+                    non_commercial_licenses.append(license_info)
+                    break
+
+    return non_commercial_licenses
 
 
 def categorize_packages(packages: List[Package]) -> Dict[str, List[Package]]:
@@ -136,18 +164,76 @@ def count_vulnerability_severity(packages):
     return severity_count
 
 
-def conclude_repo_report():
+def conclude_repo_report(packages, license_summary, config):
     """
     生成扫描报告的总结部分，包括漏洞和许可证风险评估以及引入建议
-    """
-    # TODO: 生成扫描报告的总结部分，包括漏洞和许可证风险评估以及引入建议
 
+    Args:
+        packages (list): 软件包列表，每个元素为包含漏洞信息的Package对象
+        license_summary (list): 许可证摘要信息列表，每个元素为包含许可证信息的字典
+        config (object): 配置对象，包含配置信息
 
-def conclude_pkg_report():
+    Returns:
+        tuple: 包含三个元素的元组
+            - summary (list): 报告摘要信息列表，每个元素为一个总结条目字符串
+            - result (str): 评估结果，可能为"同意引入"或"拒绝引入"
+            - suggestion (str): 引入建议文本，包含具体的风险处理建议
     """
-    生成软件包扫描报告的总结部分，包括漏洞和许可证风险评估以及引入建议
-    """
-    # TODO: 生成软件包扫描报告的总结部分，包括漏洞和许可证风险评估以及引入建议
+
+    vuln_debug = config.get("general", {}).get(
+        'debug_mode', {}).get('vulnerability', {})
+    license_debug = config.get("general", {}).get(
+        'debug_mode', {}).get('license', {})
+
+    # 生成总结部分
+    summary = []
+
+    # 漏洞总结
+    severity_count = count_vulnerability_severity(packages)
+
+    if vuln_debug.get('enabled') or all(not package.vulnerabilities for package in packages):
+        summary.append(f"漏洞风险：未发现已知安全漏洞，安全状态良好")
+    else:
+        summary.append(
+            f"共检测到 {len(packages)} 个软件包存在 "
+            f"{severity_count['critical']} 个严重漏洞、"
+            f"{severity_count['high']} 个高危漏洞、"
+            f"{severity_count['medium']} 个中危漏洞、"
+            f"{severity_count['low']} 个低危漏洞。"
+        )
+
+    # 许可证总结
+    non_commercial_licenses = _find_non_commercial_licenses(license_summary)
+    general_license_summary = "具体许可证分析及各类别许可证引入建议详见许可证合规性审查章节。"
+    if (not license_debug.get('enabled')) and non_commercial_licenses:
+        summary.append(
+            f"禁止商业用途许可证风险：检测到 {len(non_commercial_licenses)} 种条款中禁止商业用途的许可证："
+            f"{', '.join([license['name'] for license in non_commercial_licenses])}。"
+            f"{general_license_summary}"
+        )
+    else:
+        summary.append(
+            f"禁止商业用途许可证风险：未发现条款中禁止商业用途的许可证，法律风险较低。"
+            f"{general_license_summary}"
+        )
+
+    # 获得结论和引入建议
+    result = "同意引入"
+    suggestion_lines = []
+
+    if (not vuln_debug.get('enabled')) and (
+            severity_count.get("critical") > 0 or severity_count.get("high") > 0):
+        result = "拒绝引入"
+        suggestion_lines.append("存在高危及以上安全漏洞，建议剔除高风险软件包。")
+    if (not license_debug.get('enabled')) and non_commercial_licenses:
+        result = "拒绝引入"
+        suggestion_lines.append(f"存在禁止商业用途的许可证，请考虑其他替代方案。")
+
+    # 构建引入建议文本
+    suggestion = "".join(suggestion_lines) if suggestion_lines else "未发现安全风险。"
+
+    return summary, result, suggestion
+
 
 def replace_placeholders():
     """
