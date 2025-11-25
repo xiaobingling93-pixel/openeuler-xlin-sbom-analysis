@@ -12,6 +12,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+import re
 from typing import List, Dict
 from actions.package import Package
 from actions.license_helper import (
@@ -94,11 +95,45 @@ def analyze_licenses(license_summary):
 
 
 
-def count_vulnerability_severity():
+def count_vulnerability_severity(packages):
     """
     统计包列表中所有漏洞的严重级别分布
+
+    Args:
+        packages: 由Package对象组成的列表
+
+    Returns:
+        dict: 包含严重级别统计的字典
     """
-    # TODO: 通过漏洞数据集对漏洞进行统计并返回结构化结果
+
+    severity_count = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+    }
+
+    # 定义关键词映射（包括同义词处理）
+    severity_keywords = {
+        "critical": ["critical"],
+        "high": ["high"],
+        "medium": ["medium", "moderate"],
+        "low": ["low"]
+    }
+
+    for package in packages:
+        for vuln in package.vulnerabilities:
+            severity_text = vuln['severity_level'].lower()
+
+            # 检查每个严重级别关键词
+            for severity, keywords in severity_keywords.items():
+                for keyword in keywords:
+                    # 使用正则表达式确保匹配完整单词
+                    if re.search(r'\b' + keyword + r'\b', severity_text):
+                        severity_count[severity] += 1
+                        break
+
+    return severity_count
 
 
 def conclude_repo_report():
