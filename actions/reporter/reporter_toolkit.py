@@ -13,6 +13,7 @@
 # See the Mulan PSL v2 for more details.
 
 import re
+import textwrap
 from typing import List, Dict
 from actions.package import Package
 from actions.license_helper import (
@@ -235,8 +236,77 @@ def conclude_repo_report(packages, license_summary, config):
     return summary, result, suggestion
 
 
-def replace_placeholders():
+def replace_placeholders(doc, target_name, start_date, end_date, brief_summary, result, suggestion, config):
     """
     替换文档中的占位符为实际内容
+
+    Args:
+        doc (Document): python-docx文档对象，用于替换占位符
+        target_name (str): 目标软件包名称
+        start_date (str): 扫描开始日期
+        end_date (str): 扫描结束日期
+        brief_summary (str): 报告摘要信息
+        result (str): 评估结果，可能为"同意引入"或"拒绝引入"
+        suggestion (str): 引入建议文本
+        config (dict): 配置对象，包含作者、审核人等信息
+
+    Returns:
+        None: 该函数直接修改传入的doc对象，不返回任何值
     """
-    # TODO: 替换文档中的占位符为实际内容
+
+    replacements = {
+        "@TARGET": textwrap.shorten(target_name, width=70, placeholder="..."),
+        "@VERSION": config.get('general', {}).get("report_version", ""),
+        "@STARTDATE": start_date,
+        "@ENDDATE": end_date,
+        "@SUMMARY": brief_summary,
+        "@RESULT": result,
+        "@SUGGESTION": suggestion,
+        "@AUTHOR": config.get('general', {}).get("author", ""),
+        "@REVIEWER": config.get('general', {}).get("reviewer", ""),
+    }
+
+    # 替换正文段落中的文本
+    for para in doc.paragraphs:
+        for old_text, new_text in replacements.items():
+            if old_text in para.text:
+                # 在 run 级别替换以保留格式
+                for run in para.runs:
+                    if old_text in run.text:
+                        run.text = run.text.replace(old_text, new_text)
+
+    # 替换表格中的文本
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    for old_text, new_text in replacements.items():
+                        if old_text in para.text:
+                            # 在 run 级别替换以保留格式
+                            for run in para.runs:
+                                if old_text in run.text:
+                                    run.text = run.text.replace(
+                                        old_text, new_text)
+
+    # 替换页眉和页脚中的文本
+    for section in doc.sections:
+        # 处理页眉
+        if section.header:
+            for para in section.header.paragraphs:
+                for old_text, new_text in replacements.items():
+                    if old_text in para.text:
+                        # 在 run 级别替换以保留格式
+                        for run in para.runs:
+                            if old_text in run.text:
+                                run.text = run.text.replace(old_text, new_text)
+
+        # 处理页脚
+        if section.footer:
+            for para in section.footer.paragraphs:
+                for old_text, new_text in replacements.items():
+                    if old_text in para.text:
+                        # 在 run 级别替换以保留格式
+                        for run in para.runs:
+                            if old_text in run.text:
+                                run.text = run.text.replace(old_text, new_text)
+
