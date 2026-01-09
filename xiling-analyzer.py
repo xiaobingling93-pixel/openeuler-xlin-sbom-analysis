@@ -15,7 +15,10 @@
 import argparse
 import os
 import logging
-from actions import LOG_DIR
+import time
+from actions.scanner.sbom_helper import scan_sbom
+from actions.data_helper import read_data_from_json
+from actions import LOG_DIR, ASSIST_DIR
 
 
 def _parse_arguments():
@@ -136,9 +139,42 @@ def _merge_configs(default_config, external_config, path=""):
 
 def main():
     """
-    主函数，程序入口点。负责解析命令行参数、加载配置、初始化日志系统。
+    主函数，程序入口点。负责解析命令行参数、加载配置、初始化日志系统，
+    并根据参数决定执行单个仓库扫描或批量扫描。
+
+    Args:
+        None: 该函数不接受任何参数，所有输入均来自命令行参数和配置文件
+
+    Returns:
+        None: 该函数不返回任何值，直接执行扫描任务或记录错误信息
     """
-    # TODO: 添加主函数逻辑
+
+    timestamp = time.time()
+    utc_time_tuple = time.gmtime(timestamp)
+    formatted_utc_time = time.strftime("%Y%m%d%H%M%S", utc_time_tuple)
+
+    _setup_logging(formatted_utc_time)
+    args = _parse_arguments()
+    logging.debug(f"命令行参数: {args}")
+
+    default_config_path = os.path.join(ASSIST_DIR, 'config.json')
+    try:
+        config = read_data_from_json(default_config_path)
+    except Exception as e:
+        logging.error(f"无法读取默认配置文件: {e}")
+        return
+
+    if args.config:
+        try:
+            external_config = read_data_from_json(args.config)
+            config = _merge_configs(config, external_config)
+            logging.info(f"已成功加载外部配置文件: {args.config}")
+        except Exception as e:
+            logging.warning(
+                f"无法读取外部配置文件 '{args.config}' ({e})，将使用默认配置。")
+
+    if args.sbom:
+        scan_sbom(args, formatted_utc_time, config)
 
 
 if __name__ == '__main__':
