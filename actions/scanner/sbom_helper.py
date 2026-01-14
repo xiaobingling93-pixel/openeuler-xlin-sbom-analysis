@@ -17,14 +17,25 @@ import logging
 import os
 from actions.license_helper import (
     split_license,
-    get_license_category
+    get_license_category,
+    filter_licenses,
+    count_licenses,
+    licenses_visualization
 )
 from actions.scanner.vulnerability_helper import (
     query_osv_vulnerability,
     process_osv_vuln
 )
-from actions.data_helper import save_data_to_json
+from actions.data_helper import (
+    save_data_to_json,
+    save_docx_report,
+    read_data_from_json,
+    convert_docx_to_pdf,
+    setup_paths,
+    get_scan_dates,
+    log_scan_summary)
 from actions.package import Package
+import actions.reporter.docx_reporter_sbom as sbom_docx
 from tqdm import tqdm
 
 
@@ -157,8 +168,68 @@ def _process_spdx_sbom(sbom, disable_tqdm, data_dir, config):
     return packages, failed_packages
 
 
-def scan_sbom():
+def scan_sbom(args, formatted_utc_time, config):
     """
     扫描SBOM文件并生成安全评估报告
+
+    Args:
+        args (argparse.Namespace): 命令行参数对象，包含sbom文件路径、输出目录等信息
+        formatted_utc_time (str): 格式化的时间字符串，用于生成报告文件名
+        config (dict): 配置信息，包含扫描和报告生成所需的各种设置参数
+
+    Returns:
+        None: 该函数不返回任何值，但会生成并保存DOCX和PDF格式的安全评估报告
     """
-    # TODO: 读取 SBOM 文件并进行漏洞和许可证合规性分析，生成安全评估报告
+    
+    SUPPORTED_SPDX_VERSIONS = {'SPDX-2.2', 'SPDX-2.3'}
+    packages = []
+    failed_packages = []
+
+    sbom = read_data_from_json(args.sbom)
+
+    # SPDX 2.x
+    if sbom.get('spdxVersion') in SUPPORTED_SPDX_VERSIONS:
+        sbom_name = sbom.get('name')
+        base_name = f"{sbom_name}_{formatted_utc_time}"
+        paths = setup_paths(args.output, base_name)
+
+        logging.info(f"正在扫描 SPDX SBOM: {sbom_name}")
+        packages, failed_packages = _process_spdx_sbom(
+            sbom, args.disable_tqdm, paths['data_dir'], config)
+
+    # TODO: CycloneDX
+    elif False:
+        packages = []
+        failed_packages = []
+
+    # TODO: Linx SBOM
+    elif False:
+        packages = []
+        failed_packages = []
+
+    else:
+        logging.error(f"不支持的 SBOM 格式")
+
+    log_scan_summary(
+        len(packages) + len(failed_packages), failed_packages)
+
+    if packages:
+        sbom_licenses = [
+            lic for package in packages for lic in split_license(package.license)]
+        license_summary = filter_licenses(count_licenses(sbom_licenses))
+        if license_summary:
+            licenses_visualization(
+                license_summary, paths['licenses_pie_chart'])
+
+        start_date, end_date = get_scan_dates(config)
+        report, _, _ = sbom_docx.generate_docx_report(
+            sbom_name, start_date, end_date, packages,
+            license_summary, paths['licenses_pie_chart'], config
+        )
+
+        save_docx_report(report, paths['docx_report'])
+        try:
+            convert_docx_to_pdf(paths['docx_report'], paths['output_dir'])
+            logging.info(f"安全评估报告已保存至: {paths['output_dir']}")
+        except Exception as e:
+            logging.error(f"PDF 转换失败: {e}")
