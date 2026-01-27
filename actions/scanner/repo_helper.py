@@ -94,10 +94,22 @@ def _scan_repomd(repomd_path, base_repo_url):
 
 
 
-def _extract_primary_xml():
+def _extract_primary_xml(text):
     """
-    从给定的文本中提取primary.xml及其后续内容
+    从给定的URL字符串中中提取primary.xml及其后续内容
+
+    Args:
+        text (str): 输入的文本字符串，通常是从URL中提取的部分路径
+
+    Returns:
+        str: 如果输入文本包含"primary.xml"，则返回从"primary.xml"开始的子字符串；
+             如果不包含，则返回原始输入文本
     """
+
+    before, separator, after = text.partition("primary.xml")
+    if separator:
+        return "primary.xml" + after
+    return text
 
 def scan_repo():
     """
