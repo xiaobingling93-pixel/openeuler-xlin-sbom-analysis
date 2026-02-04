@@ -138,10 +138,56 @@ def _generate_vulnerability_table_docx(doc, packages):
     doc.add_paragraph()
 
 
-def _generate_scan_results_table():
+def _generate_scan_results_table(doc, packages, config):
     """
     生成扫描结果汇总表格并添加到DOCX文档中
+
+    Args:
+        doc (Document): python-docx文档对象，用于添加表格内容
+        packages (list): 软件包列表，每个元素为包含漏洞信息的Package对象
+        config (object): 配置对象，用于获取配置信息
+
+    Returns:
+        None: 该函数直接修改传入的doc对象，不返回任何值
     """
+
+    vuln_debug = config.get("general", {}).get(
+        'debug_mode', {}).get('vulnerability', {})
+
+    # 创建表格
+    table = doc.add_table(rows=1, cols=4)
+    table.style = 'Table Grid'
+
+    # 添加表头
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = '软件包'
+    hdr_cells[1].text = '版本'
+    hdr_cells[2].text = '漏洞ID'
+    hdr_cells[3].text = '许可证'
+
+    # 应用表头样式
+    for cell in hdr_cells:
+        for paragraph in cell.paragraphs:
+            paragraph.style = '表格标题'
+
+    # 填充表格数据
+    for package in packages:
+        row_cells = table.add_row().cells
+        row_cells[0].text = package.name
+        row_cells[1].text = f"{package.version}.{package.release}"
+        row_cells[2].text = (
+            ''
+            if vuln_debug.get('enabled')
+            else ', '.join(vuln['id'] for vuln in package.vulnerabilities)
+        )
+        row_cells[3].text = package.license
+
+        # 应用表格内容样式
+        for cell in row_cells:
+            for paragraph in cell.paragraphs:
+                paragraph.style = '表格内容'
+
+    doc.add_paragraph()
 
 def generate_docx_report():
     """
