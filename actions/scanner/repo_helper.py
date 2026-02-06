@@ -13,13 +13,122 @@
 # See the Mulan PSL v2 for more details.
 
 
+import gzip
+import zstandard as zstd
 import logging
-import datetime
+import os
 import xml.etree.ElementTree as ET
-def _scan_primary_xml():
+import datetime
+from typing import List, Tuple
+from actions.package import Package
+from actions.license_helper import (
+    split_license,
+    get_license_category
+)
+from actions.scanner.vulnerability_helper import (
+    query_osv_vulnerability,
+    process_osv_vuln
+)
+from actions.data_helper import save_data_to_json
+from tqdm import tqdm
+
+def _scan_primary_xml(file_path: str, data_dir: str, disable_tqdm: bool, config) -> Tuple[List[str], List[Package]]:
     """
     扫描并解析primary.xml压缩文件，提取软件包信息、许可证和漏洞数据
+
+    Args:
+        file_path (str): primary.xml压缩文件的路径
+        data_dir (str): 用于保存漏洞扫描结果数据的目录路径
+        disable_tqdm (bool): 是否禁用tqdm进度条显示
+        config (dict): 配置对象，包含配置参数，如是否只处理CVE漏洞等
+
+    Returns:
+        Tuple[List[Package], List[dict]]: 包含两个元素的元组
+            - packages (List[Package]): 成功处理的软件包列表，每个元素为Package对象
+            - failed_packages (List[dict]): 处理失败的软件包信息列表，每个元素为包含name、version、release和error字段的字典
     """
+
+    if file_path.endswith('.gz'):
+        # 处理gzip格式
+        with gzip.open(file_path, 'rb') as f:
+            tree = ET.parse(f)
+            root = tree.getroot()
+    elif file_path.endswith('.zst'):
+        # 处理zstd格式
+        with open(file_path, 'rb') as f:
+            dctx = zstd.ZstdDecompressor()
+            with dctx.stream_reader(f) as reader:
+                tree = ET.parse(reader)
+                root = tree.getroot()
+    else:
+        raise ValueError(f"不支持的文件格式: {file_path}。仅支持 .gz 和 .zst 格式")
+
+    # 定义XML命名空间
+    ns = {
+        'common': 'http://linux.duke.edu/metadata/common',
+        'rpm': 'http://linux.duke.edu/metadata/rpm'
+    }
+
+    packages = []
+    failed_packages = []  # 存储处理失败的包信息
+
+    # 获取所有package元素并添加进度条
+    pkg_elems = root.findall('common:package', ns)
+    for pkg_elem in tqdm(pkg_elems, desc="Processing packages", disable=disable_tqdm):
+        try:
+            # 提取基本信息
+            name = pkg_elem.find('common:name', ns).text
+            version_elem = pkg_elem.find('common:version', ns)
+            ver = version_elem.get('ver')
+            rel = version_elem.get('rel')
+
+            # 创建Package对象
+            pkg = Package(name, ver, rel)
+
+            logging.debug(f"Package identified：{name}-{ver}.{rel}")
+
+            # 提取许可证信息
+            format_elem = pkg_elem.find('common:format', ns)
+            license_elem = format_elem.find('rpm:license', ns)
+            license_text = license_elem.text if license_elem is not None else ""
+            pkg.add_license(license_text)
+
+            # 添加许可证类别
+            license_list = split_license(license_text)
+            for license_name in license_list:
+                category = get_license_category(license_name)
+                if category and category != "Unknown":
+                    pkg.add_category(category)
+
+            # 处理漏洞信息 - 如果查询失败则不添加该包
+            osv_vulnerability = query_osv_vulnerability(name, ver, config)
+            if osv_vulnerability:
+                vulns_record = os.path.join(
+                    data_dir, f"{name}-{ver}.{rel} 漏洞扫描结果.json")
+                save_data_to_json(osv_vulnerability, vulns_record)
+
+            vulns = osv_vulnerability.get("vulns", [])
+            for vuln in vulns:
+                vuln_id, severity_type, severity_level, fixed = process_osv_vuln(
+                    vuln, name)
+                if not config.get('general', {}).get('cve_only') or vuln_id.startswith("CVE"):
+                    pkg.add_vulnerability(
+                        vuln_id, severity_type, severity_level, fixed)
+
+            packages.append(pkg)
+
+        except Exception as e:
+            # 记录处理失败的包信息
+            failed_packages.append({
+                "name": name,
+                "version": ver,
+                "release": rel,
+                "error": str(e)
+            })
+            logging.debug(str(e))
+
+    return packages, failed_packages
+
 
 
 def _scan_repomd(repomd_path, base_repo_url):
