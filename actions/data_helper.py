@@ -16,6 +16,7 @@ import os
 import json
 import logging
 import subprocess
+import requests
 import datetime
 from pathlib import Path
 
@@ -129,6 +130,30 @@ def convert_docx_to_pdf(docx_path, output_dir):
         raise RuntimeError(f"发生未知错误: {str(e)}")
 
 
+def download_file(url, dest_path):
+    """
+    从URL下载文件到指定路径
+
+    Args:
+        url (str): 要下载文件的URL地址
+        dest_path (str): 文件保存的目标路径
+
+    Returns:
+        bool: 下载成功返回True，下载失败返回False
+    """
+
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+
+        with open(dest_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return True
+    except requests.RequestException as e:
+        logging.error(f"下载文件失败: {e}")
+        return False
+    
 def setup_paths(output_base_dir, base_name_with_timestamp):
     """
     为给定的扫描目标统一创建并返回所有必需的路径。
