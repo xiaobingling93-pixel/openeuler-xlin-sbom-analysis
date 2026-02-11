@@ -17,19 +17,31 @@ import gzip
 import zstandard as zstd
 import logging
 import os
+import tempfile
 import xml.etree.ElementTree as ET
 import datetime
 from typing import List, Tuple
 from actions.package import Package
 from actions.license_helper import (
     split_license,
-    get_license_category
+    get_license_category,
+    filter_licenses,
+    count_licenses,
+    licenses_visualization,
 )
 from actions.scanner.vulnerability_helper import (
     query_osv_vulnerability,
     process_osv_vuln
 )
-from actions.data_helper import save_data_to_json
+from actions.data_helper import (
+    save_data_to_json,
+    save_docx_report,
+    convert_docx_to_pdf,
+    download_file,
+    setup_paths,
+    get_scan_dates,
+    log_scan_summary)
+import actions.reporter.docx_reporter_repo as repo_docx
 from tqdm import tqdm
 
 def _scan_primary_xml(file_path: str, data_dir: str, disable_tqdm: bool, config) -> Tuple[List[str], List[Package]]:
@@ -220,8 +232,75 @@ def _extract_primary_xml(text):
         return "primary.xml" + after
     return text
 
-def scan_repo():
+def scan_repo(args, formatted_utc_time, config):
     """
     扫描单个源代码仓库，生成安全引入评估报告。
+
+    Args:
+        args (argparse.Namespace): 命令行参数对象，包含repo、output、disable_tqdm等属性
+        formatted_utc_time (str): 格式化的时间字符串，用于生成唯一的文件名
+        config (dict): 配置字典，包含扫描和报告生成的相关配置
+
+    Returns:
+        None: 该函数不返回任何值，直接生成报告文件并记录日志
     """
 
+    base_repo_url = args.repo.rstrip('/')
+    repo_name = os.path.basename(base_repo_url)
+    base_name = f"{repo_name}_{formatted_utc_time}"
+    paths = setup_paths(args.output, base_name)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        if base_repo_url.endswith('.gz') or base_repo_url.endswith('.zst'):
+            # 指定扫描
+            primary_xml_path = os.path.join(
+                temp_dir, _extract_primary_xml(base_repo_url))
+            target_name = f"{base_repo_url}"
+
+            if not download_file(base_repo_url, primary_xml_path):
+                logging.error(f"从 {base_repo_url} 下载 primary.xml 时出错。")
+                return
+        else:
+            # 自动探测
+            repomd_url = f"{base_repo_url}/update/source/repodata/repomd.xml"
+            logging.info(f"正在从 {repomd_url} 获取最新软件包信息...")
+
+            repomd_path = os.path.join(temp_dir, "repomd.xml")
+            if not download_file(repomd_url, repomd_path):
+                logging.error(f"无法从 {base_repo_url} 获取数据，请检查网络连接或仓库地址。")
+                return
+
+            primary_url, repomd_date = _scan_repomd(repomd_path, base_repo_url)
+            primary_xml_path = os.path.join(
+                temp_dir, _extract_primary_xml(primary_url))
+            target_name = f"{base_repo_url}({repomd_date})"
+
+            if not download_file(primary_url, primary_xml_path):
+                logging.error(f"从 {primary_url} 下载 primary.xml 时出错。")
+                return
+
+        packages, failed_packages = _scan_primary_xml(
+            primary_xml_path, paths['data_dir'], args.disable_tqdm, config)
+
+        log_scan_summary(
+            len(packages) + len(failed_packages), failed_packages)
+
+        repo_licenses = [
+            lic for package in packages for lic in split_license(package.license)]
+        license_summary = filter_licenses(count_licenses(repo_licenses))
+        if license_summary:
+            licenses_visualization(
+                license_summary, paths['licenses_pie_chart'])
+
+        start_date, end_date = get_scan_dates(config)
+        report, _, _ = repo_docx.generate_docx_report(
+            target_name, start_date, end_date, packages,
+            license_summary, paths['licenses_pie_chart'], config
+        )
+
+        save_docx_report(report, paths['docx_report'])
+        try:
+            convert_docx_to_pdf(paths['docx_report'], paths['output_dir'])
+            logging.info(f"安全引入评估报告已保存至: {paths['output_dir']}")
+        except Exception as e:
+            logging.error(f"PDF 转换失败: {e}")
