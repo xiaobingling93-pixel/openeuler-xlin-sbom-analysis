@@ -16,6 +16,7 @@ import argparse
 import os
 import logging
 import time
+from actions.scanner.repo_helper import scan_repo
 from actions.scanner.sbom_helper import scan_sbom
 from actions.data_helper import read_data_from_json
 from actions import LOG_DIR, ASSIST_DIR
@@ -40,6 +41,7 @@ def _parse_arguments():
         description='对SBOM文件进行安全评估，并生成安全评估报告。')
 
     group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--repo", "-r", help="待扫描的源代码仓库地址。")
     group.add_argument("--sbom", "-s", help="SBOM文件路径")
 
     parser.add_argument("--output", "-o", required=True, help="安全评估报告输出目录。")
@@ -173,7 +175,9 @@ def main():
             logging.warning(
                 f"无法读取外部配置文件 '{args.config}' ({e})，将使用默认配置。")
 
-    if args.sbom:
+    if args.repo:
+        scan_repo(args, formatted_utc_time, config)
+    elif args.sbom:
         scan_sbom(args, formatted_utc_time, config)
 
 
