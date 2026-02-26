@@ -35,7 +35,7 @@ docker images | grep xiling-analyzer
 | 模式 | 命令参数 | 输入来源 | 典型应用场景 |
 |------|----------|----------|-------------|
 | SBOM分析 | `--sbom` / `-s` | SBOM文件(SPDX 2.x) | 基于已有SBOM进行深入分析 |
-| 单个仓库扫描（开发中） | `--repo` / `-r` | 在线仓库URL | 扫描特定发行版的软件包 |
+| 单个仓库扫描 | `--repo` / `-r` | 在线仓库URL | 扫描特定发行版的软件包 |
 | 批量扫描（开发中）| `--batch` / `-b` | 本地CSV文件 | 批量扫描多个指定源代码项目 |
 
 ### 基本命令结构
@@ -69,6 +69,54 @@ docker run --rm -v ${PWD}:/app/data -v ${PWD}/reports:/app/output xiling-analyze
 ```
 
 > **注意**：当前仅支持 SPDX 2.X 格式的 SBOM 文件。
+
+### 模式二：扫描软件仓库源
+
+此模式专为扫描在线软件仓库源设计，支持两种方式：
+
+#### 方式A：自动扫描最新软件包（推荐）
+
+提供仓库根目录地址，工具会自动探测并扫描最新的软件包信息。
+
+**命令格式：**
+```bash
+docker run --rm -v <主机输出目录>:/app/output xiling-analyzer:latest --repo <仓库根URL> --output /app/output
+```
+
+**使用示例：**
+```bash
+# Linux/Mac
+docker run --rm -v $(pwd)/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/ \
+  --output /app/output
+
+# Windows PowerShell
+docker run --rm -v ${PWD}/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/ \
+  --output /app/output
+```
+
+#### 方式B：指定特定primary.xml文件
+
+提供完整的primary.xml.gz文件地址，适用于需要扫描特定版本或历史版本的场景。
+
+**命令格式：**
+```bash
+docker run --rm -v <主机输出目录>:/app/output xiling-analyzer:latest --repo <primary.xml文件URL> --output /app/output
+```
+
+**使用示例：**
+```bash
+# Linux/Mac
+docker run --rm -v $(pwd)/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/update/source/repodata/25f85b6e3808d6cc265685aa496c2ab0772b05e964802fa68df40ec550630c29-primary.xml.gz \
+  --output /app/output
+
+# Windows PowerShell
+docker run --rm -v ${PWD}/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/update/source/repodata/25f85b6e3808d6cc265685aa496c2ab0772b05e964802fa68df40ec550630c29-primary.xml.gz \
+  --output /app/output
+```
 
 ## 高级配置
 
