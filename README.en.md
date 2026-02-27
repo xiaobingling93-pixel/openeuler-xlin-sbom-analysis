@@ -35,7 +35,7 @@ Choose one of the following three modes based on your needs:
 | Mode | Command Parameter | Input Source | Typical Use Case |
 |------|-------------------|--------------|------------------|
 | SBOM Analysis | `--sbom` / `-s` | SBOM file (SPDX 2.x) | In-depth analysis based on an existing SBOM |
-| Single Repository Scan (in development) | `--repo` / `-r` | Online repository URL | Scanning packages for a specific distribution |
+| Single Repository Scan | `--repo` / `-r` | Online repository URL | Scanning packages for a specific distribution |
 | Batch Scan (in development) | `--batch` / `-b` | Local CSV file | Bulk scanning of multiple specified source code projects |
 
 ### Basic Command Structure
@@ -69,6 +69,54 @@ docker run --rm -v ${PWD}:/app/data -v ${PWD}/reports:/app/output xiling-analyze
 ```
 
 > **Note**: Currently, only SBOM files in SPDX 2.X format are supported.
+
+### Mode 2: Scanning Repository
+
+This mode is specifically designed for scanning online software repository and supports two methods:
+
+#### Method A: Automatic Scanning of the Latest Packages (Recommended)
+
+Provide the repository root URL, and the tool will automatically detect and scan the latest package information.
+
+**Command Format:**
+```bash
+docker run --rm -v <host output directory>:/app/output xiling-analyzer:latest --repo <repository root URL> --output /app/output
+```
+
+**Usage Examples:**
+```bash
+# Linux/Mac
+docker run --rm -v $(pwd)/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/ \
+  --output /app/output
+
+# Windows PowerShell
+docker run --rm -v ${PWD}/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/ \
+  --output /app/output
+```
+
+#### Method B: Specifying a Specific primary.xml File
+
+Provide the full URL of the `primary.xml.gz` file. This is suitable for scenarios where you need to scan a specific version or historical version.
+
+**Command Format:**
+```bash
+docker run --rm -v <host output directory>:/app/output xiling-analyzer:latest --repo <primary.xml file URL> --output /app/output
+```
+
+**Usage Examples:**
+```bash
+# Linux/Mac
+docker run --rm -v $(pwd)/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/update/source/repodata/25f85b6e3808d6cc265685aa496c2ab0772b05e964802fa68df40ec550630c29-primary.xml.gz \
+  --output /app/output
+
+# Windows PowerShell
+docker run --rm -v ${PWD}/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/update/source/repodata/25f85b6e3808d6cc265685aa496c2ab0772b05e964802fa68df40ec550630c29-primary.xml.gz \
+  --output /app/output
+```
 
 ## Advanced Configuration
 
