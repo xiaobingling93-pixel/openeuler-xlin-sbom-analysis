@@ -13,12 +13,79 @@
 # See the Mulan PSL v2 for more details.
 
 
+import tempfile
+import os
+import shutil
 from fnmatch import fnmatch
 
 def _extract_src_rpm(src_rpm_path):
     """
     解压 .src.rpm 文件并提取其中的源代码压缩文件，返回解压后的源代码目录路径。
+
+    Args:
+        src_rpm_path (str): .src.rpm 文件的路径。
+
+    Returns:
+        str: 解压后的源代码目录路径。
+
+    Raises:
+        ValueError: 如果未在 .src.rpm 文件中找到源代码压缩文件。
     """
+
+    import libarchive
+
+    # 创建一个临时目录用于解压 .src.rpm 文件
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        # 解压 .src.rpm 文件
+        with libarchive.file_reader(src_rpm_path) as archive:
+            for entry in archive:
+                pathname = os.path.join(temp_dir, entry.pathname)
+                if entry.isdir:
+                    os.makedirs(pathname, exist_ok=True)
+                elif entry.isfile:
+                    parent_dir = os.path.dirname(pathname)
+                    os.makedirs(parent_dir, exist_ok=True)
+                    with open(pathname, 'wb') as f:
+                        for block in entry.get_blocks():
+                            f.write(block)
+
+        # 在解压后的文件中查找源代码压缩文件
+        source_archive = None
+        for root, dirs, files in os.walk(temp_dir):
+            for file in files:
+                if file.endswith(('.tar.xz', '.tar.gz', '.tgz', '.tar.bz2')):
+                    source_archive = os.path.join(root, file)
+                    break
+            if source_archive:
+                break
+
+        if not source_archive:
+            raise ValueError("未在 .src.rpm 文件中找到源代码压缩文件")
+
+        # 创建一个临时目录用于解压源代码压缩文件
+        source_dir = tempfile.mkdtemp()
+
+        # 解压源代码压缩文件
+        with libarchive.file_reader(source_archive) as archive:
+            for entry in archive:
+                pathname = os.path.join(source_dir, entry.pathname)
+                if entry.isdir:
+                    os.makedirs(pathname, exist_ok=True)
+                elif entry.isfile:
+                    parent_dir = os.path.dirname(pathname)
+                    os.makedirs(parent_dir, exist_ok=True)
+                    with open(pathname, 'wb') as f:
+                        for block in entry.get_blocks():
+                            f.write(block)
+
+        # 返回解压后的源代码目录路径
+        return source_dir
+
+    finally:
+        # 清理 .src.rpm 的临时目录
+        shutil.rmtree(temp_dir)
 
 
 def _should_include(member_name, include_patterns, exclude_patterns):
