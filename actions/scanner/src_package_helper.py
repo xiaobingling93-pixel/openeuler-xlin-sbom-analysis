@@ -16,6 +16,7 @@
 import tempfile
 import os
 import shutil
+import logging
 from fnmatch import fnmatch
 
 def _extract_src_rpm(src_rpm_path):
@@ -113,7 +114,49 @@ def _should_include(member_name, include_patterns, exclude_patterns):
 def _process_member(member_path):
     """
     处理指定的文件成员，提取其许可证、版权信息以及其他元数据。
+
+    Args:
+        member_path (str): 文件系统的路径，指向需要处理的文件。
+
+    Returns:
+        dict or None: 包含文件信息的字典，如果处理失败则返回None。字典包含以下字段：
+            - name (str): 处理后的文件路径
+            - license (str): 检测到的SPDX许可证表达式
+            - holders (list of str): 版权持有者列表
     """
+
+    from scancode import api as scancode
+    import traceback
+
+    try:
+        licenses = scancode.get_licenses(
+            location=member_path, include_text=True)
+        copyright_data = scancode.get_copyrights(location=member_path)
+
+        detected_license_expression_spdx = licenses.get(
+            'detected_license_expression_spdx')
+        holders = list(set(item['holder']
+                           for item in copyright_data.get('holders', [])))
+
+        # 处理 member_path
+        parts = member_path.split('/')
+        if parts[0] == '':
+            new_parts = [''] + parts[4:]
+        else:
+            new_parts = parts[3:]
+        processed_file_path = '/'.join(new_parts)
+
+        file_info = {
+            "name": processed_file_path,
+            "license": detected_license_expression_spdx,
+            "holders": holders
+        }
+
+        return file_info
+    except Exception as e:
+        logging.error(f"处理文件 {member_path} 失败: {e}\n{traceback.format_exc()}")
+        return None
+
 
 
 def scan_src_dir(source_dir, output_file, include, exclude, workers, disable_tqdm):
