@@ -17,7 +17,10 @@ import tempfile
 import os
 import shutil
 import logging
+from tqdm import tqdm
+from multiprocessing import Pool
 from fnmatch import fnmatch
+from actions.scanner.dep_helper import dep_scan
 
 def _extract_src_rpm(src_rpm_path):
     """
@@ -162,7 +165,49 @@ def _process_member(member_path):
 def scan_src_dir(source_dir, output_file, include, exclude, workers, disable_tqdm):
     """
     扫描源代码目录，提取文件的许可证和版权信息，并进行依赖项扫描。
+
+    Args:
+        source_dir (str): 要扫描的源代码目录路径
+        output_file (str): 依赖项扫描结果输出文件的路径
+        include (list): 要包含的文件模式列表，空列表表示包含所有文件
+        exclude (list): 要排除的文件模式列表，空列表表示不排除任何文件
+        workers (int): 用于并行处理的进程数，None表示使用默认值4
+        disable_tqdm (bool): 是否禁用进度条显示
+
+    Returns:
+        list: 包含文件信息的字典列表，每个字典包含文件名、许可证和版权持有者信息
     """
+
+    members = []
+    file_list = []
+
+    for root, dirs, files in os.walk(source_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if _should_include(file_path, include, exclude):
+                members.append(file_path)
+    total_files = len(members)
+
+    # 使用多进程来处理文件
+    if workers is None:
+        workers = 4
+        logging.info(f"使用默认的线程数({workers})进行许可证/版权信息扫描")
+
+    else:
+        logging.info(f"使用 {workers} 个线程进行许可证/版权信息扫描")
+
+    # 许可证扫描
+    with Pool(processes=workers) as pool:
+        for file_info in tqdm(pool.imap_unordered(_process_member, members), total=total_files, desc="许可证/版权信息扫描：", disable=disable_tqdm):
+            if file_info and file_info.get('license'):
+                file_list.append(file_info)
+
+    # 依赖项扫描
+    logging.info("扫描依赖项...")
+    dep_scan(source_dir, output_file)
+
+    shutil.rmtree(source_dir)
+    return file_list
 
 
 def scan_src_rpm(src_rpm_path, output_file, include, exclude, workers, disable_tqdm):
