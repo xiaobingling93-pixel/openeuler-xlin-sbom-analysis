@@ -213,4 +213,20 @@ def scan_src_dir(source_dir, output_file, include, exclude, workers, disable_tqd
 def scan_src_rpm(src_rpm_path, output_file, include, exclude, workers, disable_tqdm):
     """
     扫描 .src.rpm 文件，提取其中的源代码并进行许可证和依赖项分析。
+
+    Args:
+        src_rpm_path (str): .src.rpm 文件的路径
+        output_file (str): 依赖项扫描结果输出文件的路径
+        include (list): 要包含的文件模式列表，空列表表示包含所有文件
+        exclude (list): 要排除的文件模式列表，空列表表示不排除任何文件
+        workers (int): 用于并行处理的进程数，None表示使用默认值4
+        disable_tqdm (bool): 是否禁用进度条显示
+
+    Returns:
+        list: 包含文件信息的字典列表，每个字典包含文件名、许可证和版权持有者信息
     """
+
+    source_dir = _extract_src_rpm(src_rpm_path)
+    file_list = scan_src_dir(
+        source_dir, output_file, include, exclude, workers, disable_tqdm)
+    return file_list
