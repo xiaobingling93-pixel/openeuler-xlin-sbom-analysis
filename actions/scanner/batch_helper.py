@@ -12,10 +12,107 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+import os
+import tempfile
+import logging
+import shutil
+import subprocess
+from tabulate import tabulate
+from actions.scanner.src_package_helper import (
+    scan_src_dir,
+    scan_src_rpm
+)
+from actions.data_helper import (
+    download_file,
+    SUPPORTED_ARCHIVES)
+
+
 def _scan_source_code(type_, path, dep_scan_file, config, max_workers, disable_tqdm):
     """
     根据给定的类型和路径，扫描源代码并返回文件列表。
+
+    Args:
+        type_ (str): 目标类型，可选值包括 'git', 'src-rpm', 'src', 'url'
+        path (str): 目标路径，可以是git仓库URL、文件路径或下载链接
+        dep_scan_file (str): 依赖扫描结果文件的路径
+        config (dict): 配置对象，包含扫描相关的配置信息
+        max_workers (int): 扫描时使用的最大工作线程数
+        disable_tqdm (bool): 是否禁用进度条显示
+
+    Returns:
+        list: 扫描到的文件列表，每个元素为包含文件信息的字典
+
+    Raises:
+        ValueError: 当目标类型无效或文件类型不支持时抛出
+        IOError: 当文件下载失败时抛出
+        subprocess.CalledProcessError: 当git clone命令执行失败时抛出
     """
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        if type_ == 'git':
+            logging.info(f"正在从 {path} 中 clone 源码")
+            subprocess.run(['git', 'clone', path, temp_dir],
+                           check=True, capture_output=True, text=True)
+            return scan_src_dir(temp_dir,
+                                dep_scan_file,
+                                config.get('batch_scan', {}).get(
+                                    'include_file_patterns', []),
+                                config.get('batch_scan', {}).get(
+                                    'exclude_file_patterns', []),
+                                max_workers,
+                                disable_tqdm
+                                )
+
+        elif type_ == 'src-rpm':
+            return scan_src_rpm(path,
+                                dep_scan_file,
+                                config.get('batch_scan', {}).get(
+                                    'include_file_patterns', []),
+                                config.get('batch_scan', {}).get(
+                                    'exclude_file_patterns', []),
+                                max_workers,
+                                disable_tqdm
+                                )
+
+        elif type_ in ['src', 'url']:
+            local_path = path
+            if type_ == 'url':
+                file_name = os.path.basename(path)
+                local_path = os.path.join(temp_dir, file_name)
+                logging.info(f"正在从 {path} 下载源码包")
+                if not download_file(path, local_path):
+                    raise IOError(f"下载文件失败: {path}")
+
+            file_name = os.path.basename(local_path)
+            if file_name.endswith('.src.rpm'):
+                logging.info(f"处理 SRPM 文件: {file_name}")
+                return scan_src_rpm(local_path,
+                                    dep_scan_file,
+                                    config.get('batch_scan', {}).get(
+                                        'include_file_patterns', []),
+                                    config.get('batch_scan', {}).get(
+                                        'exclude_file_patterns', []),
+                                    max_workers,
+                                    disable_tqdm
+                                    )
+            elif any(file_name.endswith(ext) for ext in SUPPORTED_ARCHIVES):
+                logging.info(f"解压压缩包: {file_name}")
+                unpack_dir = os.path.join(temp_dir, 'unpacked')
+                os.makedirs(unpack_dir, exist_ok=True)
+                shutil.unpack_archive(local_path, unpack_dir)
+                return scan_src_dir(unpack_dir,
+                                    dep_scan_file,
+                                    config.get('batch_scan', {}).get(
+                                        'include_file_patterns', []),
+                                    config.get('batch_scan', {}).get(
+                                        'exclude_file_patterns', []),
+                                    max_workers,
+                                    disable_tqdm
+                                    )
+            else:
+                raise ValueError(f"不支持的文件类型: {file_name}")
+        else:
+            raise ValueError(f"无效的目标类型: {type_}")
 
 
 def _process_dependencies(package, dependencies_data, config):
@@ -34,6 +131,7 @@ def _print_summary_table(packages):
     """
     打印软件包扫描结果的汇总表格
     """
+
 
 def _process_package_from_row(row, args, formatted_utc_time, config):
     """
