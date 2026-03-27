@@ -17,14 +17,20 @@ import tempfile
 import logging
 import shutil
 import subprocess
-from tabulate import tabulate
 from actions.scanner.src_package_helper import (
     scan_src_dir,
     scan_src_rpm
 )
+from actions.scanner.vulnerability_helper import process_osv_vuln
+from actions.license_helper import (
+    split_license,
+    get_license_category
+)
 from actions.data_helper import (
     download_file,
-    SUPPORTED_ARCHIVES)
+    SUPPORTED_ARCHIVES
+    )
+from actions.package import Package
 
 
 def _scan_source_code(type_, path, dep_scan_file, config, max_workers, disable_tqdm):
@@ -118,7 +124,40 @@ def _scan_source_code(type_, path, dep_scan_file, config, max_workers, disable_t
 def _process_dependencies(package, dependencies_data, config):
     """
     处理依赖项数据，并将它们作为依赖项添加到主 Package 对象中。
+
+    Args:
+        package (Package): 主软件包对象，用于添加依赖项
+        dependencies_data (dict): 依赖项扫描的原始数据，包含依赖包信息、许可证和漏洞数据
+        config (dict): 配置对象，包含处理依赖项相关的配置信息
+
+    Returns:
+        None: 该函数直接修改传入的package对象，不返回任何值
     """
+
+    results = dependencies_data.get('results', [])
+    dep_pkgs = results[0].get('packages', []) if results else []
+    for dep_pkg in dep_pkgs:
+        base_info = dep_pkg.get('package', {})
+        dep = Package(base_info.get('name'), base_info.get('version'), None)
+
+        dep_licenses_list = dep_pkg.get('licenses', [])
+        license_text = ' AND '.join(dep_licenses_list)
+        dep.add_license(license_text)
+
+        for license_name in split_license(license_text):
+            category = get_license_category(license_name)
+            if category and category != "Unknown":
+                dep.add_category(category)
+
+        vulns = dep_pkg.get('vulnerabilities', [])
+        for vuln in vulns:
+            vuln_id, severity_type, severity_level, fixed = process_osv_vuln(
+                vuln, dep.name)
+            if not config.get('general', {}).get('cve_only') or vuln_id.startswith("CVE"):
+                dep.add_vulnerability(
+                    vuln_id, severity_type, severity_level, fixed)
+
+        package.add_dependency(dep)
 
 
 def _add_vulnerabilities_to_package(package, config):

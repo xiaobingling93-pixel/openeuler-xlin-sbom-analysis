@@ -20,6 +20,9 @@ import requests
 import datetime
 from pathlib import Path
 
+SUPPORTED_ARCHIVES = ('.tar', '.tar.gz', '.tgz', '.tar.xz', '.txz',
+                      '.tar.bz2', '.tbz2', '.zip', '.7z')
+
 
 def read_data_from_json(json_file_path):
     """
