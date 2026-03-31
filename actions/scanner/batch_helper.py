@@ -21,7 +21,10 @@ from actions.scanner.src_package_helper import (
     scan_src_dir,
     scan_src_rpm
 )
-from actions.scanner.vulnerability_helper import process_osv_vuln
+from actions.scanner.vulnerability_helper import (
+    query_osv_vulnerability,
+    process_osv_vuln
+)
 from actions.license_helper import (
     split_license,
     get_license_category
@@ -163,7 +166,27 @@ def _process_dependencies(package, dependencies_data, config):
 def _add_vulnerabilities_to_package(package, config):
     """
     查询 OSV 漏洞并将其添加到 Package 对象中。返回原始漏洞数据以便保存。
+
+    Args:
+        package (Package): 软件包对象，用于添加漏洞信息
+        config (dict): 配置对象，包含漏洞处理相关的配置信息，如是否只处理CVE漏洞
+
+    Returns:
+        dict or None: 返回从OSV查询到的原始漏洞数据字典，如果未查询到数据则返回None
     """
+
+    osv_data = query_osv_vulnerability(package.name, package.version, config)
+    if not osv_data:
+        return None
+
+    vulns = osv_data.get("vulns", [])
+    for vuln in vulns:
+        vuln_id, severity_type, severity_level, fixed = process_osv_vuln(
+            vuln, package.name)
+        if not config.get('general', {}).get('cve_only') or vuln_id.startswith("CVE"):
+            package.add_vulnerability(
+                vuln_id, severity_type, severity_level, fixed)
+    return osv_data
 
 
 def _print_summary_table(packages):
